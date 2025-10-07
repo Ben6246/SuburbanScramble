@@ -1,0 +1,29 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Lisle" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-88.085, 41.795], [-88.07, 41.795],
+          [-88.07, 41.81], [-88.085, 41.81],
+          [-88.085, 41.795]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Naperville" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-88.17, 41.77], [-88.14, 41.77],
+          [-88.14, 41.79], [-88.17, 41.79],
+          [-88.17, 41.77]
+        ]]
+      }
+    }
+  ]
+}
