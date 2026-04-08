@@ -1,6 +1,9 @@
+SuburbanScrambleAPI$Town.class
+SuburbanScrambleAPI$TownButton.class
 SuburbanScrambleGUI.class
 SuburbanScrambleGUI$TownButton.class
-SuburbanScrambleAPI$Town.class
+SuburbanScrambleMAP.class
 SuburbanScrambleAPI.class
+SuburbanScrambleMAP$TownRegion.class
 SuburbanScrambleGUI$TownButton$1.class
-SuburbanScrambleAPI$TownButton.class
+SuburbanScrambleMAP$1.class
