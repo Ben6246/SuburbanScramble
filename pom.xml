@@ -11,8 +11,8 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
     </properties>
 
     <dependencies>
@@ -37,7 +37,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
-                    <mainClass>SuburbanScrambleAPI</mainClass>
+                    <mainClass>SuburbanScrambleMAP</mainClass>
                 </configuration>
             </plugin>
             <plugin>

@@ -29,7 +29,7 @@ public class SuburbanScrambleMAP extends JFrame {
     /** One town/municipality fetched from Overpass */
     static class TownRegion {
         String name;
-        List<GeoPosition> polygon = new ArrayList<>(); // outer boundary points
+        List<List<GeoPosition>> rings = new ArrayList<>(); // outer boundary points
         int claimState = 0; // 0 = unclaimed, 1 = team1, 2 = team2
     }
 
@@ -110,47 +110,47 @@ public class SuburbanScrambleMAP extends JFrame {
      * Populates this.regions.
      */
     private void fetchBoundaries(double lat, double lng, int radiusMeters) throws Exception {
-        // admin_level 8 = city/town/village in the US
-        String query = "[out:json];"
-                + "(relation[\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]"
-                + "(around:" + radiusMeters + "," + lat + "," + lng + "););"
-                + "out geom;";
+    String query = "[out:json];"
+            + "(relation[\"boundary\"=\"administrative\"][\"admin_level\"=\"8\"]"
+            + "(around:" + radiusMeters + "," + lat + "," + lng + "););"
+            + "out geom;";
 
-        String encoded = "data=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    String encoded = "data=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://overpass-api.de/api/interpreter"))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(encoded))
-                .build();
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("https://overpass-api.de/api/interpreter"))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .POST(HttpRequest.BodyPublishers.ofString("data=" + URLEncoder.encode(query, StandardCharsets.UTF_8)))
+        .build();
 
-        String body = HttpClient.newHttpClient()
-                .send(request, HttpResponse.BodyHandlers.ofString()).body();
+    System.out.println("Overpass query: " + query);
+    System.out.println("URL: https://overpass-api.de/api/interpreter");
+    String body = HttpClient.newHttpClient()
+            .send(request, HttpResponse.BodyHandlers.ofString()).body();
+    System.out.println("Response: " + body);
+    JsonNode elements = new ObjectMapper().readTree(body).path("elements");
 
-        JsonNode elements = new ObjectMapper().readTree(body).path("elements");
+    for (JsonNode el : elements) {
+        TownRegion region = new TownRegion();
+        region.name = el.path("tags").path("name").asText("Unknown");
 
-        for (JsonNode el : elements) {
-            TownRegion region = new TownRegion();
-            region.name = el.path("tags").path("name").asText("Unknown");
+        // Collect ALL outer way segments (not just the first one)
+        for (JsonNode member : el.path("members")) {
+            if (!"outer".equals(member.path("role").asText())) continue;
+            List<GeoPosition> ring = new ArrayList<>();
+            //JsonNode geometry = member.path("geometry");
+            for (JsonNode pt : member.path("geometry")) {
+                ring.add(new GeoPosition(pt.get("lat").asDouble(), pt.get("lon").asDouble()));
+        }
+        if (ring.size() > 1) region.rings.add(ring);
+            // NO break — keep looping through all outer members
+        }
 
-            // Each relation has members; we want the outer way geometry
-            for (JsonNode member : el.path("members")) {
-                if (!"outer".equals(member.path("role").asText())) continue;
-
-                JsonNode geometry = member.path("geometry");
-                for (JsonNode pt : geometry) {
-                    double pLat = pt.get("lat").asDouble();
-                    double pLng = pt.get("lon").asDouble();
-                    region.polygon.add(new GeoPosition(pLat, pLng));
-                }
-                break; // only need the first outer ring for now
-            }
-
-            if (region.polygon.size() > 2) {
-                regions.add(region);
-            }
+        if (!region.rings.isEmpty()) {
+            regions.add(region);
         }
     }
+}
 
     // ── GUI builder ──────────────────────────────────────────────────────────
 
@@ -159,8 +159,15 @@ public class SuburbanScrambleMAP extends JFrame {
 
         // Set up JXMapViewer
         mapViewer = new JXMapViewer();
-        TileFactoryInfo info = new OSMTileFactoryInfo();
-        mapViewer.setTileFactory(new DefaultTileFactory(info));
+        mapViewer.setPreferredSize(new Dimension(900, 650));
+        mapViewer.setBorder(BorderFactory.createLineBorder(Color.RED, 3));
+        TileFactoryInfo info = new OSMTileFactoryInfo(
+        "OpenStreetMap", 
+        "https://tile.openstreetmap.org"
+        );
+        DefaultTileFactory tileFactory = new DefaultTileFactory(info);
+        tileFactory.setThreadPoolSize(4);
+        mapViewer.setTileFactory(tileFactory);
         mapViewer.setAddressLocation(new GeoPosition(centerLat, centerLng));
         mapViewer.setZoom(7); // adjust: lower = more zoomed in
 
@@ -195,6 +202,8 @@ public class SuburbanScrambleMAP extends JFrame {
         setSize(900, 700);
         setLocationRelativeTo(null);
         setVisible(true);
+        mapViewer.setZoom(7);
+        mapViewer.setAddressLocation(new GeoPosition(centerLat, centerLng));
     }
 
     // ── Painters (draw polygons) ─────────────────────────────────────────────
@@ -205,14 +214,16 @@ public class SuburbanScrambleMAP extends JFrame {
         for (TownRegion region : regions) {
             painters.add((g2, map, w, h) -> {
                 // Convert geo polygon to screen polygon
-                Path2D path = new Path2D.Double();
-                boolean first = true;
-                for (GeoPosition gp : region.polygon) {
-                    Point2D pt = map.convertGeoPositionToPoint(gp);
-                    if (first) { path.moveTo(pt.getX(), pt.getY()); first = false; }
-                    else         path.lineTo(pt.getX(), pt.getY());
+                Path2D path = new Path2D.Double(Path2D.WIND_NON_ZERO);
+                for (List<GeoPosition> ring : region.rings) {
+                    boolean first = true;
+                    for (GeoPosition gp : ring) {
+                        Point2D pt = map.convertGeoPositionToPoint(gp);
+                        if (first) { path.moveTo(pt.getX(), pt.getY()); first = false; }
+                        else path.lineTo(pt.getX(), pt.getY());
+                    }
+                path.closePath(); // close each ring individually
                 }
-                path.closePath();
 
                 // Fill color based on claim state
                 Color fill = switch (region.claimState) {
@@ -228,11 +239,18 @@ public class SuburbanScrambleMAP extends JFrame {
                 g2.draw(path);
 
                 // Draw town name at centroid
+                double avLats = 0;
+                double avLons = 0;
+                int ringCount = 0;
+                for(List<GeoPosition> ring: region.rings){
+                    avLats += ring.stream().mapToDouble(p -> p.getLatitude()).average().orElse(0);
+                    avLons += ring.stream().mapToDouble(p -> p.getLongitude()).average().orElse(0);
+                    ringCount++;
+                }
+                double avLat = avLats/ringCount;
+                double avLon = avLons/ringCount;
                 Point2D center = map.convertGeoPositionToPoint(
-                        new GeoPosition(
-                                region.polygon.stream().mapToDouble(p -> p.getLatitude()).average().orElse(0),
-                                region.polygon.stream().mapToDouble(p -> p.getLongitude()).average().orElse(0)
-                        ));
+                new GeoPosition(avLat, avLon));
                 g2.setColor(Color.BLACK);
                 g2.setFont(new Font("SansSerif", Font.BOLD, 11));
                 g2.drawString(region.name, (float) center.getX() - 20, (float) center.getY());
@@ -251,15 +269,16 @@ public class SuburbanScrambleMAP extends JFrame {
         Point2D clickPt = mapViewer.convertGeoPositionToPoint(clicked);
 
         for (TownRegion region : regions) {
-            Path2D path = new Path2D.Double();
-            boolean first = true;
-            for (GeoPosition gp : region.polygon) {
+            Path2D path = new Path2D.Double(Path2D.WIND_NON_ZERO);
+            for (List<GeoPosition> lgp : region.rings){
+                boolean first = true;
+                for(GeoPosition gp : lgp){
                 Point2D pt = mapViewer.convertGeoPositionToPoint(gp);
                 if (first) { path.moveTo(pt.getX(), pt.getY()); first = false; }
                 else         path.lineTo(pt.getX(), pt.getY());
+                }
+                path.closePath();
             }
-            path.closePath();
-
             if (path.contains(clickPt)) return region;
         }
         return null;
