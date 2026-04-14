@@ -31,6 +31,7 @@ public class SuburbanScrambleMAP extends JFrame {
         String name;
         List<List<GeoPosition>> rings = new ArrayList<>(); // outer boundary points
         int claimState = 0; // 0 = unclaimed, 1 = team1, 2 = team2
+        int population;
     }
 
     // Claim maps (name → region) mirroring API.java
@@ -133,6 +134,7 @@ public class SuburbanScrambleMAP extends JFrame {
     for (JsonNode el : elements) {
         TownRegion region = new TownRegion();
         region.name = el.path("tags").path("name").asText("Unknown");
+        region.population = el.path("tags").path("population").asInt(0);
 
         // Collect ALL outer way segments (not just the first one)
         for (JsonNode member : el.path("members")) {
@@ -147,6 +149,7 @@ public class SuburbanScrambleMAP extends JFrame {
         }
 
         if (!region.rings.isEmpty()) {
+            region.rings = stitchRings(region.rings);
             regions.add(region);
         }
     }
@@ -284,6 +287,45 @@ public class SuburbanScrambleMAP extends JFrame {
         return null;
     }
 
+    private List<List<GeoPosition>> stitchRings(List<List<GeoPosition>> segments) {
+    List<List<GeoPosition>> remaining = new ArrayList<>(segments);
+    List<List<GeoPosition>> result = new ArrayList<>();
+
+    while (!remaining.isEmpty()) {
+        List<GeoPosition> chain = new ArrayList<>(remaining.remove(0));
+        boolean progress = true;
+        while (progress) {
+            progress = false;
+            for (int i = 0; i < remaining.size(); i++) {
+                List<GeoPosition> seg = remaining.get(i);
+                GeoPosition chainEnd = chain.get(chain.size() - 1);
+                GeoPosition segStart = seg.get(0);
+                GeoPosition segEnd = seg.get(seg.size() - 1);
+
+                if (close(chainEnd, segStart)) {
+                    chain.addAll(seg);
+                    remaining.remove(i);
+                    progress = true;
+                    break;
+                } else if (close(chainEnd, segEnd)) {
+                    List<GeoPosition> rev = new ArrayList<>(seg);
+                    Collections.reverse(rev);
+                    chain.addAll(rev);
+                    remaining.remove(i);
+                    progress = true;
+                    break;
+                }
+            }
+        }
+        result.add(chain);
+    }
+    return result;
+}
+
+private boolean close(GeoPosition a, GeoPosition b) {
+    return Math.abs(a.getLatitude()  - b.getLatitude())  < 0.0001 &&
+           Math.abs(a.getLongitude() - b.getLongitude()) < 0.0001;
+}
     // ── Claim logic ──────────────────────────────────────────────────────────
 
     private void cycleClaim(TownRegion region) {
@@ -302,6 +344,16 @@ public class SuburbanScrambleMAP extends JFrame {
 
     private void showGameStats() {
         int t1 = t1_towns.size(), t2 = t2_towns.size();
+        int t1pop = 0;
+        String[] t1_townnames = new String[t1_towns.size()];
+        int i = 0;
+        for(String s: t1_towns.keySet()){
+            t1_townnames[i] = s;
+            i++;
+        }
+        for(int j = 0; i < t1_towns.size(); i++){
+            t1pop+=t1_towns.get(t1_townnames[i]).population;
+        }
         String winner = t1 > t2 ? "Team 1 wins!" : t2 > t1 ? "Team 2 wins!" : "Tie!";
 
         String msg = "=== GAME STATS ===\n\n"
