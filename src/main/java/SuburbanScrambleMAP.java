@@ -32,6 +32,7 @@ public class SuburbanScrambleMAP extends JFrame {
         List<List<GeoPosition>> rings = new ArrayList<>(); // outer boundary points
         int claimState = 0; // 0 = unclaimed, 1 = team1, 2 = team2
         int population;
+        double area;
     }
 
     // Claim maps (name → region) mirroring API.java
@@ -135,6 +136,7 @@ public class SuburbanScrambleMAP extends JFrame {
         TownRegion region = new TownRegion();
         region.name = el.path("tags").path("name").asText("Unknown");
         region.population = el.path("tags").path("population").asInt(0);
+        region.area = el.path("tags").path("area").asDouble(0.0);
 
         // Collect ALL outer way segments (not just the first one)
         for (JsonNode member : el.path("members")) {
@@ -340,25 +342,30 @@ private boolean close(GeoPosition a, GeoPosition b) {
         mapViewer.repaint(); // redraw polygons with new color
     }
 
-    // ── Stats (mirrors API.java) ─────────────────────────────────────────────
+    private int getPop(Map<String, TownRegion> towns) {
+    int pop = 0;
+    for (TownRegion region : towns.values()) {
+        pop += region.population;
+    }
+    return pop;
+    }
 
     private void showGameStats() {
-        int t1 = t1_towns.size(), t2 = t2_towns.size();
-        int t1pop = 0;
-        String[] t1_townnames = new String[t1_towns.size()];
-        int i = 0;
-        for(String s: t1_towns.keySet()){
-            t1_townnames[i] = s;
-            i++;
+        int t1 = t1_towns.size(), t2 = t2_towns.size(); 
+        int t1pop = getPop(t1_towns);
+        int t2pop = getPop(t2_towns);
+        int t1score = t1;
+        int t2score = t2;
+        if(t1pop>t2pop){
+            t1score++;
         }
-        for(int j = 0; i < t1_towns.size(); i++){
-            t1pop+=t1_towns.get(t1_townnames[i]).population;
+        else if(t2pop>t1pop){
+            t2score++;
         }
-        String winner = t1 > t2 ? "Team 1 wins!" : t2 > t1 ? "Team 2 wins!" : "Tie!";
-
+        String winner = t1score > t2score ? "Team 1 wins!" : t2score > t1score ? "Team 2 wins!" : "Tie!";
         String msg = "=== GAME STATS ===\n\n"
-                + "Team 1: " + t1 + " towns\n"
-                + "Team 2: " + t2 + " towns\n\n"
+                + "Team 1: " + t1 + " towns. " + t1pop + " people.\n"
+                + "Team 2: " + t2 + " towns. " + t2pop + " people.\n"
                 + winner;
 
         JOptionPane.showMessageDialog(this, msg, "Stats", JOptionPane.INFORMATION_MESSAGE);
